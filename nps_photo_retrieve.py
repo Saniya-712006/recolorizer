@@ -58,7 +58,7 @@ def retrieveImages(site, page, foundSites, images):
             newPage = newURL[pageIndex:]
             retrieveImages(newSite, newPage, foundSites, images)
     except:
-        print 'Could not read:', site + page
+        print('Could not read:', site + page)
 
 # Downloads the image with this URL.
 def downloadImage(image):
@@ -71,10 +71,10 @@ def downloadImage(image):
         f.write(binary)
         f.close()
     except:
-        print 'Could not read image:', image
+        print('Could not read image:', image)
 
 images = []
 retrieveImages(nps_site, "", set(), images)
-print "Found", len(images), "images"
+print("Found", len(images), "images")
 for image in images:
     downloadImage(image)

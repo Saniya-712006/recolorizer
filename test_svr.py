@@ -5,10 +5,10 @@ import os
 
 from sklearn.svm import SVR
 from skimage.segmentation import slic, mark_boundaries
-from skimage.data import imread
+from skimage.io import imread
 from skimage.io import imsave
 from skimage.util import img_as_float
-from sklearn.externals import joblib
+import joblib
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -118,7 +118,15 @@ def apply_mrf(observed_u, observed_v, segments, n_segments, img, subsquares):
 # Given an image, predict its chrominance (U and V values in YUV space)
 def predict_image(u_svr, v_svr, path, verbose, output_file = None):
     img, segments = segment_image(path)
-    yuv = retrieveYUV(img)   # Use first component of yuv to obtain black and white
+    # yuv = retrieveYUV(img)   # Use first component of yuv to obtain black and white
+    # FIX: Handle grayscale images correctly
+    if img.ndim == 2:
+        y_channel = img
+        u_channel = np.zeros_like(img)
+        v_channel = np.zeros_like(img)
+        yuv = np.stack([y_channel, u_channel, v_channel], axis=-1)
+    else:
+        yuv = retrieveYUV(img)
     n_segments = segments.max() + 1
 
     # Construct the centroids of the image
@@ -133,8 +141,10 @@ def predict_image(u_svr, v_svr, path, verbose, output_file = None):
         luminance[value] += yuv[i][j][0]
 
     for k in range(n_segments):
-        centroids[k] /= point_count[k]
-        luminance[k] /= point_count[k]
+    # FIX: Prevent division by zero for empty segments
+        if point_count[k] > 0:
+            centroids[k] /= point_count[k]
+            luminance[k] /= point_count[k]
 
     # Generate the subsquares
     subsquares = np.zeros((n_segments, SQUARE_SIZE * SQUARE_SIZE))
@@ -149,7 +159,8 @@ def predict_image(u_svr, v_svr, path, verbose, output_file = None):
         for i in range(0, SQUARE_SIZE):
             for j in range(0, SQUARE_SIZE):
                 subsquares[k][i*SQUARE_SIZE + j] = yuv[i + top][j + left][0]
-        subsquares[k] = np.fft.fft2(subsquares[k].reshape(SQUARE_SIZE, SQUARE_SIZE)).reshape(SQUARE_SIZE * SQUARE_SIZE)
+        # subsquares[k] = np.fft.fft2(subsquares[k].reshape(SQUARE_SIZE, SQUARE_SIZE)).reshape(SQUARE_SIZE * SQUARE_SIZE)
+        subsquares[k] = np.fft.fft2(subsquares[k].reshape(SQUARE_SIZE, SQUARE_SIZE)).reshape(SQUARE_SIZE * SQUARE_SIZE).real
 
     # Predict using SVR
     predicted_u = clampU(u_svr.predict(subsquares)*2)
@@ -168,7 +179,7 @@ def predict_image(u_svr, v_svr, path, verbose, output_file = None):
     error = 1000 * np.linalg.norm(rgb - img) / (img.shape[0] * img.shape[1])
 
     if verbose:
-        print 'Norm error:', error
+        print('Norm error:', error)
         # Draw the actual figure
         fig = plt.figure(frameon=False)
         ax = plt.Axes(fig, [0., 0., 1., 1.])
@@ -176,7 +187,8 @@ def predict_image(u_svr, v_svr, path, verbose, output_file = None):
         fig.add_axes(ax)
         ax.imshow(rgb)
         if output_file:
-            imsave(output_file, rgb)
+            # imsave(output_file, rgb)
+            imsave(output_file, (rgb * 255).astype(np.uint8))
         plt.show()
 
     return error
@@ -193,14 +205,14 @@ if __name__ == '__main__':
     if args.a:   # Test each of the models on the given data set.
         u_svrs = []
         v_svrs = []
-        print 'Loading models:'
+        print('Loading models:')
         for model in range(len(C_LIST) * len(EPSILON_LIST)):
             u_svrs.append(joblib.load('models/u_svr' + str(model) + '.model'))
             v_svrs.append(joblib.load('models/v_svr' + str(model) + '.model'))
-        print 'Finished loading models.\n'
+        print('Finished loading models.\n')
 
         for model in range(len(C_LIST) * len(EPSILON_LIST)):
-            print 'Running predictions for model', model
+            print('Running predictions for model', model)
             total_error = 0
             num_files = 0
 
@@ -210,13 +222,13 @@ if __name__ == '__main__':
                     if path.endswith('.jpg'):
                         total_error += predict_image(u_svrs[model], v_svrs[model], path, False)
                         num_files += 1
-            print 'Total error for model', model, ':', total_error / num_files
+            print('Total error for model', model, ':', total_error / num_files)
 
     if args.c:   # Test each of the models on the given data set, modifying the ICM constants.
         u_svr = joblib.load('models/u_svr.model')
         v_svr = joblib.load('models/v_svr.model')
         for weight_diff in WEIGHT_DIFF_LIST:
-            print 'Running predictions for weight difference:', weight_diff
+            print('Running predictions for weight difference:', weight_diff)
             WEIGHT_DIFF = weight_diff
             total_error = 0
             num_files = 0
@@ -227,11 +239,11 @@ if __name__ == '__main__':
                     if path.endswith('.jpg'):
                         total_error += predict_image(u_svr, v_svr, path, False)
                         num_files += 1
-            print 'Total error for weight diff', weight_diff, ':', total_error / num_files
+            print('Total error for weight diff', weight_diff, ':', total_error / num_files)
         WEIGHT_DIFF = 2
 
         for threshold in THRESHOLD_LIST:
-            print 'Running predictions for threshold:', threshold
+            print('Running predictions for threshold:', threshold)
             THRESHOLD = threshold
             total_error = 0
             num_files = 0
@@ -242,7 +254,7 @@ if __name__ == '__main__':
                     if path.endswith('.jpg'):
                         total_error += predict_image(u_svr, v_svr, path, False)
                         num_files += 1
-            print 'Total error for threshold', threshold, ':', total_error / num_files
+            print('Total error for threshold', threshold, ':', total_error / num_files)
 
 
     else:        # Test on the single image

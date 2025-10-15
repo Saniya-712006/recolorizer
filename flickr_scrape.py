@@ -31,10 +31,10 @@ while True:
 
         # Only try to create the file if it doesn't exist already.
         if not os.path.isfile(file):
-            print "Downloading " + url + " to " + file + "..."
+            print("Downloading " + url + " to " + file + "...")
             photo_req = requests.get(url)
             if photo_req.status_code != requests.codes.ok:
-                print "Error requesting photo."
+                print("Error requesting photo.")
                 break
 
             # Write the file atomically, so we don't have corrupted images.
@@ -42,9 +42,12 @@ while True:
                 for chunk in photo_req.iter_content(1024):
                     fd.write(chunk)
         else:
-            print file + " already exists..."
+            print(file + " already exists...")
 
     # Continue until we've exhausted all of the pages.
     if page < json['photos']['pages']:
-        print "Querying page", page, "out of", json['photos']['pages']
+        print("Querying page", page, "out of", json['photos']['pages'])
         page += 1
+    else:
+        print("Finished downloading all pages.")
+        break
